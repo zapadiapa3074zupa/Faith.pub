@@ -1,4 +1,4 @@
--- [[ 1. ALL SETTINGS RESTORED ]]
+-- [[ 1. SETTINGS CONFIG ]]
 local settings = {
     esp_Enabled = false,
     esp_Box = false,
@@ -124,12 +124,13 @@ local function IsSleeping(char)
     return false
 end
 
--- [[ 6. UI RESTORED ]]
+-- [[ 6. UI SETUP ]]
 local espTab = DrRayLibrary.newTab("Visuals", "rbxassetid://6020453174")
 local combatTab = DrRayLibrary.newTab("Combat", "rbxassetid://6020453174")
 local miscTab = DrRayLibrary.newTab("Misc", "rbxassetid://6020453174")
 local oreTab = DrRayLibrary.newTab("Ores", "rbxassetid://6020453174")
 
+-- Visuals
 espTab.newToggle("Enable ESP", "Master", settings.esp_Enabled, function(v) settings.esp_Enabled = v end)
 espTab.newToggle("Box", "2D", settings.esp_Box, function(v) settings.esp_Box = v end)
 espTab.newToggle("Skeleton", "Joints", settings.esp_Skeleton, function(v) settings.esp_Skeleton = v end)
@@ -138,19 +139,22 @@ espTab.newToggle("Name", "Identify", settings.esp_Name, function(v) settings.esp
 espTab.newToggle("Distance", "Meters", settings.esp_Distance, function(v) settings.esp_Distance = v end)
 espTab.newToggle("Weapon", "Held", settings.esp_Weapon, function(v) settings.esp_Weapon = v end)
 espTab.newToggle("Armor", "Gear", settings.esp_Armor, function(v) settings.esp_Armor = v end)
-espTab.newToggle("No Bot", "Filter", settings.esp_NoBot, function(v) settings.esp_NoBot = v end)
+espTab.newToggle("No Bot", "Hide Shylou", settings.esp_NoBot, function(v) settings.esp_NoBot = v end)
 espTab.newToggle("Ignore Sleepers", "Filter", settings.esp_SleepCheck, function(v) settings.esp_SleepCheck = v end)
 
+-- Combat
 combatTab.newToggle("Silent Aim", "Enable", settings.combat_SilentAim, function(v) settings.combat_SilentAim = v end)
 combatTab.newSlider("FOV Size", "Radius", 800, true, function(v) settings.combat_FovSize = v end)
 combatTab.newToggle("Show FOV", "Outline", settings.combat_ShowFOV, function(v) settings.combat_ShowFOV = v end)
 combatTab.newToggle("Hitbox Expand", "Enable", settings.combat_HitboxEnabled, function(v) settings.combat_HitboxEnabled = v end)
 combatTab.newSlider("Hitbox Size", "Radius", 30, true, function(v) settings.combat_HitboxSize = v end)
 
+-- Misc
 miscTab.newToggle("Armor Inspector", "Prox", settings.misc_ArmorInspector, function(v) settings.misc_ArmorInspector = v end)
 miscTab.newToggle("Dot Crosshair", "Center", settings.misc_DotCrosshair, function(v) settings.misc_DotCrosshair = v end)
 
-oreTab.newToggle("Enable Ores", "Global", settings.ore_Enabled, function(v) settings.ore_Enabled = v end)
+-- Ores
+oreTab.newToggle("Enable Ores", "Master", settings.ore_Enabled, function(v) settings.ore_Enabled = v end)
 oreTab.newToggle("Stone", "Show", settings.ore_ShowStone, function(v) settings.ore_ShowStone = v end)
 oreTab.newToggle("Iron", "Show", settings.ore_ShowIron, function(v) settings.ore_ShowIron = v end)
 oreTab.newToggle("Nitrate", "Show", settings.ore_ShowNitrate, function(v) settings.ore_ShowNitrate = v end)
@@ -172,7 +176,7 @@ Services.RunService.RenderStepped:Connect(function()
     for i = 1, #children do
         local model = children[i]
         
-        -- PLAYER / BOT LOGIC
+        -- PLAYER/BOT LOGIC
         if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") and model:FindFirstChild("Head") then
             local head = model.Head
             local tag = head:FindFirstChild("Nametag") and head.Nametag:FindFirstChild("tag")
@@ -217,7 +221,7 @@ Services.RunService.RenderStepped:Connect(function()
                 if p then p.Size = Vector3.new(settings.combat_HitboxSize, settings.combat_HitboxSize, settings.combat_HitboxSize); p.Transparency = 0.6; p.CanCollide = false end
             end
 
-        -- ORE LOGIC RESTORED
+        -- ORE LOGIC
         elseif settings.ore_Enabled then
             local mp = model:FindFirstChildOfClass("MeshPart")
             if mp and mp.MeshId == ore_id.Stone.MeshId then
