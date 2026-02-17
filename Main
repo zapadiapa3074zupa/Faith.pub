@@ -1,242 +1,482 @@
--- [[ 1. MASTER SETTINGS ]]
-local settings = {
-    esp_Enabled = true,
-    esp_Box = true,
-    esp_Skeleton = true,
-    esp_Tracer = true,
-    esp_Name = true,
-    esp_Distance = true,
-    esp_Weapon = true,
-    esp_Armor = true,
-    esp_SleepCheck = true,
-    esp_NoBot = false,
-    esp_MaxDistance = 5000,
-    combat_HitboxEnabled = true,
-    combat_HitPart = "Head",
-    combat_HitboxSize = 8.4,
-    combat_SilentAim = true,
-    combat_ShowFOV = true,
-    combat_FovSize = 67,
-    misc_ArmorInspector = false,
-    misc_DotCrosshair = true,
-    ore_Enabled = false,
-    ore_MaxDistance = 1200,
-    ore_ShowStone = false,
-    ore_ShowIron = false,
-    ore_ShowNitrate = false,
-    ore_Chams = false
-}
-
--- [[ 2. SERVICES & GLOBALS ]]
-local Services = {
-    Players = game:GetService("Players"),
-    RunService = game:GetService("RunService"),
-    CoreGui = game:GetService("CoreGui"),
-    ReplicatedStorage = game:GetService("ReplicatedStorage"),
-    Workspace = game:GetService("Workspace")
-}
-local camera = workspace.CurrentCamera
-local LocalPlayer = Services.Players.LocalPlayer
-
-local skeleton_order = {
-    ["LeftFoot"] = "LeftLowerLeg", ["LeftLowerLeg"] = "LeftUpperLeg", ["LeftUpperLeg"] = "LowerTorso",
-    ["RightFoot"] = "RightLowerLeg", ["RightLowerLeg"] = "RightUpperLeg", ["RightUpperLeg"] = "LowerTorso",
-    ["LeftHand"] = "LeftLowerArm", ["LeftLowerArm"] = "LeftUpperArm", ["LeftUpperArm"] = "Torso",
-    ["RightHand"] = "RightLowerArm", ["RightLowerArm"] = "RightUpperArm", ["RightUpperArm"] = "Torso",
-    ["LowerTorso"] = "Torso", ["Torso"] = "Head"
-}
-
-local ore_id = {
-    Stone = "rbxassetid://12939036056",
-    NitrateColor = Color3.fromRGB(248, 248, 248),
-    IronColor = Color3.fromRGB(199, 172, 120)
-}
-
--- [[ 3. LIBRARIES ]]
 local DrRayLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/DrRay-UI-Library/main/DrRay.lua"))()
-local DrawingLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Pumpuma/UKI/main/Mycustomdrawing.lua"))()
-local window = DrRayLibrary:Load("chino.pubv2", "Default")
+local window = DrRayLibrary:Load("Faith.pub", "Default");
 
--- [[ 4. SILENT AIM LOGIC ]]
-local players = {}
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Camera = workspace.CurrentCamera
+
+-- // Silent Aim Variables //
+local players = {} -- Fetched via getgc
 local createProjectile
-local validGuns = {"AR15", "C9", "Crossbow", "Bow", "EnergyRifle", "GaussRifle", "HMAR", "KABAR", "LeverActionRifle", "M4A1", "PipePistol", "PipeSMG", "PumpShotgun", "SCAR", "SVD", "USP9", "UZI", "Blunderbuss"}
+local validGuns = { "AR15", "C9", "Crossbow", "Bow", "EnergyRifle", "GaussRifle", "HMAR", "KABAR", "LeverActionRifle", "M4A1", "PipePistol", "PipeSMG", "PumpShotgun", "SCAR", "SVD", "USP9", "UZI", "Blunderbuss" }
 
+local settings = {
+    silentAim = {
+        Enabled = false,
+        HitPart = "Head",
+        MaxDistance = 2500,
+        TargetSleeping = false,
+        TargetScientists = true,
+        Fov = {
+            Visible = false,
+            Radius = 67,
+            Color = Color3.fromRGB(255, 255, 255),
+            Filled = false
+        },
+        Snapline = {
+            Enabled = false,
+            Color = Color3.fromRGB(255, 255, 255)
+        },
+        Highlight = {
+            Enabled = false,
+            Color = Color3.fromRGB(255, 255, 255),
+            FillTransparency = 1
+        }
+    },
+    esp = {
+        Enabled = false,
+        Tracer = false,
+        Box = false,
+        Distance = false,
+        Name = false,
+        Weapon = false,
+        Armor = false,
+        MaxDistance = 5000,
+        TeamCheck = false,
+        SleepCheck = false,
+        NoBot = false,
+        UpdateSpeed = 120
+    },
+    combat = {
+        HitboxEnabled = false,
+        HitPart = "Head",
+        HitboxSize = 8.4,
+        HitboxTeam = false,
+        ManipulationEnabled = false,
+        ManipulationHeight = 5
+    },
+    misc = {
+        JumpShoot = false,
+        WalkShoot = false,
+        WaterShoot = false
+    }
+}
+
+-- // Silent Aim Visuals setup //
 local fovCircle = Drawing.new("Circle")
-fovCircle.Thickness = 1.5; fovCircle.NumSides = 64; fovCircle.Filled = false; fovCircle.Color = Color3.new(1, 1, 1); fovCircle.Visible = false
+fovCircle.Thickness = 1
+fovCircle.NumSides = 64
+fovCircle.Filled = false
+fovCircle.ZIndex = 999
+fovCircle.Visible = false
 
-for i, v in getgc() do
-    if typeof(v) == "function" and not iscclosure(v) then
-        local consts = debug.getconstants(v)
-        if consts[1] == "ProjectileSpeed" then createProjectile = v
-        elseif debug.info(v, "n") == "updatePlayers" then players = debug.getupvalue(v, 1) end
-    end
+local saSnapLine = Drawing.new("Line")
+saSnapLine.ZIndex = 998
+saSnapLine.Visible = false
+
+local HL = Instance.new("Highlight")
+HL.Name = "SilentAimHighlight"
+HL.Parent = CoreGui
+HL.FillTransparency = 1
+
+-- // Silent Aim Functions //
+local function IsValidGun(gun) 
+    return table.find(validGuns, tostring(gun)) ~= nil 
 end
 
-function CalculateBulletDrop(tPos, tVel, cPos, pSpeed, pDrop)
-    local tTT = (tPos - cPos).Magnitude / pSpeed
-    local pTP = tPos + (Vector3.new(tVel.X * 7, tVel.Y * 2, tVel.Z * 7) * tTT)
-    local dP = -pDrop ^ (tTT * pDrop) + 1
-    return pTP - Vector3.new(0, dP, 0)
+-- Hook game functions
+for i, v in getgc() do 
+    if typeof(v) == "function" and not iscclosure(v) then 
+        local consts = debug.getconstants(v) 
+        local info = debug.info(v, "s") 
+        if consts[1] == "ProjectileSpeed" and string.match(info, "RangedWeaponClient") then 
+            createProjectile = v 
+        elseif debug.info(v, "n") == "updatePlayers" and string.match(info, "PlayerClient") then 
+            players = debug.getupvalue(v, 1) 
+        end 
+    end 
 end
 
+local function isPlayerVisible(hitPart) 
+    local raycastParams = RaycastParams.new() 
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist 
+    raycastParams.FilterDescendantsInstances = {Camera.Parent or Camera} 
+    raycastParams.IgnoreWater = true 
+    local origin = Camera.CFrame.Position 
+    local direction = (hitPart.Position - origin) 
+    local rayResult = workspace:Raycast(origin, direction, raycastParams) 
+    if rayResult then 
+        local hitModel = rayResult.Instance:FindFirstAncestorOfClass("Model") 
+        if hitModel and hitModel == hitPart.Parent then return true end 
+        return false 
+    end 
+    return true 
+end
+
+local function getClosestPlayer() 
+    local closest = nil 
+    local closestIndex = 0 
+    local closestDist = math.huge 
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2) 
+    
+    for idx, player in pairs(players) do 
+        if not player.model then continue end 
+        if player.sleeping and not settings.silentAim.TargetSleeping then continue end 
+        if player.type == "Scientist" and not settings.silentAim.TargetScientists then continue end 
+        
+        -- Use the HitPart from settings
+        local head = player.model:FindFirstChild(settings.silentAim.HitPart) 
+        if not head then continue end 
+        
+        local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position) 
+        if not onScreen or screenPos.Z <= 0 then continue end 
+        
+        local dist2D = (center - Vector2.new(screenPos.X, screenPos.Y)).Magnitude 
+        if dist2D > fovCircle.Radius then continue end 
+        
+        local dist3D = (head.Position - Camera.CFrame.Position).Magnitude 
+        if dist3D > settings.silentAim.MaxDistance then continue end 
+        
+        if not isPlayerVisible(head) then continue end 
+        
+        if dist2D < closestDist then 
+            closestDist = dist2D 
+            closest = head 
+            closestIndex = idx 
+        end 
+    end 
+    return closest, closestIndex 
+end
+
+function CalculateBulletDrop(tPos, tVel, cPos, pSpeed, pDrop) 
+    local dTT = (tPos - cPos).Magnitude 
+    local tTT = dTT / pSpeed 
+    local sVE = 8.8 - (pSpeed / (400 + pSpeed / 30)) 
+    local horizontalVel = Vector3.new(tVel.X, 0, tVel.Z) * 7 
+    local verticalVel = Vector3.new(0, tVel.Y, 0) * 2 
+    local adjustedVel = horizontalVel + verticalVel 
+    local pTP = tPos + (adjustedVel * tTT) 
+    local dP = -pDrop ^ (tTT * pDrop) + 1 
+    local pPWD = pTP - Vector3.new(0, dP, 0) 
+    return pPWD 
+end
+
+local oldCreateProjectile 
 if createProjectile then
-    local oldCP; oldCP = hookfunction(createProjectile, function(cFrame, weaponInfo, isLocal, p63, p64)
-        if isLocal and settings.combat_SilentAim then
-            local target = nil; local cD = math.huge
-            local center = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
-            for _, p in pairs(players) do
-                if p.model and p.model:FindFirstChild("Head") then
-                    local sPos, on = camera:WorldToViewportPoint(p.model.Head.Position)
-                    if sPos.Z > 0 then
-                        local d2 = (center - Vector2.new(sPos.X, sPos.Y)).Magnitude
-                        if d2 < settings.combat_FovSize and d2 < cD then cD = d2; target = p end
-                    end
-                end
-            end
-            if target and table.find(validGuns, tostring(weaponInfo.type)) then
-                cFrame = CFrame.new(cFrame.Position, CalculateBulletDrop(target.model.Head.Position, target.velocityVector or Vector3.zero, cFrame.Position, weaponInfo.ProjectileSpeed, weaponInfo.ProjectileDrop or 0))
-            end
-        end
-        return oldCP(cFrame, weaponInfo, isLocal, p63, p64)
+    oldCreateProjectile = hookfunction(createProjectile, function(cFrame, weaponInfo, isLocal, p63, p64) 
+        if isLocal and settings.silentAim.Enabled then 
+            local hitPart, index = getClosestPlayer() 
+            if hitPart and IsValidGun(weaponInfo.type) then 
+                local playerVelocity = Vector3.zero 
+                for i, player in pairs(players) do 
+                    if i == index and player.velocityVector then 
+                        playerVelocity = player.velocityVector 
+                        break 
+                    end 
+                end 
+                local prediction = CalculateBulletDrop( 
+                    hitPart.Position, playerVelocity, cFrame.Position, weaponInfo.ProjectileSpeed, weaponInfo.ProjectileDrop or 0 
+                ) 
+                cFrame = CFrame.new(cFrame.Position, prediction) 
+            end 
+        end 
+        return oldCreateProjectile(cFrame, weaponInfo, isLocal, p63, p64) 
     end)
 end
 
--- [[ 5. HELPERS ]]
-local function GetPlayerWeapon(char)
-    for _, v in pairs(char:GetChildren()) do if v:IsA("Model") and v:GetAttribute("name") then return tostring(v:GetAttribute("name")) end end
-    return "None"
+-- // Generic Helpers //
+
+local function resetPartSize(part)
+    -- Stub for the ESP/Hitbox logic
 end
 
-local function GetArmor(char)
-    local f = char:FindFirstChild("Armor")
-    if not f then return "None" end
-    local items = {}
-    for _, v in pairs(f:GetChildren()) do table.insert(items, v.Name) end
-    return #items > 0 and table.concat(items, ", ") or "None"
+local Items = game:GetService("ReplicatedStorage"):WaitForChild("HandModels")
+for _, v in pairs(Items:GetChildren()) do
+    v:SetAttribute("RealName", v.Name)
 end
 
-local function IsSleeping(char)
-    local anim = char:FindFirstChildOfClass("Humanoid") or char:FindFirstChild("AnimationController")
-    if not anim then return false end
-    for _, track in pairs(anim:GetPlayingAnimationTracks()) do if track.Animation.AnimationId == "rbxassetid://13280887764" then return true end end
+local originalSizes = {}
+
+local function resetPartSize(part)
+    if part and originalSizes[part] then
+        part.Size = originalSizes[part]
+        part.Transparency = 0
+        part.CanCollide = true
+    end
+end
+
+local function PlayerWeapon(Player)
+    local Model = Player:FindFirstChildOfClass("Model")
+    return Model and Model:GetAttribute("RealName") or "None"
+end
+
+local SleepAnimationId = "rbxassetid://13280887764"
+function IsSleeping(Player)
+    local Animations = Player.AnimationController:GetPlayingAnimationTracks()
+    for _, v in pairs(Animations) do
+        if v.IsPlaying and v.Animation.AnimationId == SleepAnimationId then
+            return true
+        end
+    end
     return false
 end
 
--- [[ 6. UI RESTORED (EVERY TAB) ]]
-local espTab = DrRayLibrary.newTab("Visuals", "rbxassetid://6020453174")
-local combatTab = DrRayLibrary.newTab("Combat", "rbxassetid://6020453174")
-local miscTab = DrRayLibrary.newTab("Misc", "rbxassetid://6020453174")
-local oreTab = DrRayLibrary.newTab("Ores", "rbxassetid://6020453174")
+local function getHighestPriorityArmor(armorFolder)
+    local priorityLevels = { Wood = 1, Riot = 2, Iron = 3, Steel = 4, Military = 5 }
+    local priorityNames = { [1] = "Wood", [2] = "Riot", [3] = "Iron", [4] = "Steel", [5] = "Military" }
+    
+    local highestPriority = 0
+    local armorType = ""
+    local miscCount = 0
+    local hasMisc = false
+    local onlyMisc = true
 
-espTab.newToggle("Enable ESP", "Master", settings.esp_Enabled, function(v) settings.esp_Enabled = v end)
-espTab.newToggle("Box", "2D", settings.esp_Box, function(v) settings.esp_Box = v end)
-espTab.newToggle("Skeleton", "Joints", settings.esp_Skeleton, function(v) settings.esp_Skeleton = v end)
-espTab.newToggle("Tracer", "Snaplines", settings.esp_Tracer, function(v) settings.esp_Tracer = v end)
-espTab.newToggle("Name", "Players", settings.esp_Name, function(v) settings.esp_Name = v end)
-espTab.newToggle("Distance", "Meters", settings.esp_Distance, function(v) settings.esp_Distance = v end)
-espTab.newToggle("Weapon", "Held Item", settings.esp_Weapon, function(v) settings.esp_Weapon = v end)
-espTab.newToggle("Armor", "Gear", settings.esp_Armor, function(v) settings.esp_Armor = v end)
-espTab.newToggle("No Bot", "Hide Shylou", settings.esp_NoBot, function(v) settings.esp_NoBot = v end)
-espTab.newToggle("Ignore Sleepers", "Filter", settings.esp_SleepCheck, function(v) settings.esp_SleepCheck = v end)
+    if not armorFolder then return "No Armor" end
 
-combatTab.newToggle("Silent Aim", "Bullet Predict", settings.combat_SilentAim, function(v) settings.combat_SilentAim = v end)
-combatTab.newSlider("FOV Size", "Radius", 800, true, function(v) settings.combat_FovSize = v end)
-combatTab.newToggle("Show FOV", "Circle", settings.combat_ShowFOV, function(v) settings.combat_ShowFOV = v end)
-combatTab.newToggle("Hitbox Expander", "Modify", settings.combat_HitboxEnabled, function(v) settings.combat_HitboxEnabled = v end)
-combatTab.newSlider("Hitbox Size", "Radius", 30, true, function(v) settings.combat_HitboxSize = v end)
+    for _, item in pairs(armorFolder:GetChildren()) do
+        local armorName = item.Name
+        local currentPriority = 0
 
-miscTab.newToggle("Armor Inspector", "Prox UI", settings.misc_ArmorInspector, function(v) settings.misc_ArmorInspector = v end)
-miscTab.newToggle("Crosshair Dot", "Screen Center", settings.misc_DotCrosshair, function(v) settings.misc_DotCrosshair = v end)
-
-oreTab.newToggle("Enable Ores", "Global", settings.ore_Enabled, function(v) settings.ore_Enabled = v end)
-oreTab.newToggle("Stone", "Show", settings.ore_ShowStone, function(v) settings.ore_ShowStone = v end)
-oreTab.newToggle("Iron", "Show", settings.ore_ShowIron, function(v) settings.ore_ShowIron = v end)
-oreTab.newToggle("Nitrate", "Show", settings.ore_ShowNitrate, function(v) settings.ore_ShowNitrate = v end)
-oreTab.newToggle("Ore Chams", "Highlight", settings.ore_Chams, function(v) settings.ore_Chams = v end)
-
--- [[ 7. MASTER RENDER LOOP ]]
-local sGui = Instance.new("ScreenGui", Services.CoreGui); sGui.IgnoreGuiInset = true
-Services.RunService.RenderStepped:Connect(function()
-    sGui:ClearAllChildren()
-    local Center = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
-    fovCircle.Visible = settings.combat_ShowFOV; fovCircle.Radius = settings.combat_FovSize; fovCircle.Position = Center
-
-    if settings.misc_DotCrosshair then DrawingLib.new("Square").create(sGui, Center, 4, 4, Color3.new(1,0,0), Color3.new(1,0,0), 1) end
-
-    local children = Services.Workspace:GetChildren()
-    for i = 1, #children do
-        local model = children[i]
+        if armorName:find("Wood") then currentPriority = priorityLevels.Wood
+        elseif armorName:find("Riot") then currentPriority = priorityLevels.Riot
+        elseif armorName:find("Iron") then currentPriority = priorityLevels.Iron
+        elseif armorName:find("Steel") then currentPriority = priorityLevels.Steel
+        elseif armorName == "CombatHelmet" or armorName == "KevlarVest" then currentPriority = priorityLevels.Military
+        end
         
-        -- PLAYER LOGIC
-        if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") and model:FindFirstChild("Head") then
-            local hrp = model.HumanoidRootPart
-            local sPos, on = camera:WorldToViewportPoint(hrp.Position)
-            local tag = model.Head:FindFirstChild("Nametag") and model.Head.Nametag:FindFirstChild("tag")
-            local dName = (tag and tag.Text ~= "") and tag.Text or model.Name
+        if currentPriority > highestPriority then
+            highestPriority = currentPriority
+            armorType = priorityNames[highestPriority]
+            onlyMisc = false
+        end
+    end
+
+    local miscItemsList = { "SmallBackpack", "Sling", "Rebreather", "CamoShirt", "CamoPants", "PoliceShirt", "PolicePants", "Boots" }
+    for _, item in pairs(armorFolder:GetChildren()) do
+        if item:IsA("Folder") and table.find(miscItemsList, item.Name) then
+            hasMisc = true
+            miscCount = miscCount + 1
+        end
+    end
+
+    if onlyMisc and hasMisc then return "Misc+" .. tostring(miscCount)
+    elseif not onlyMisc and hasMisc then return armorType .. "+" .. tostring(miscCount)
+    elseif not onlyMisc then return armorType
+    else return "No Armor" end
+end
+
+-- // UI Creation //
+local espTab = DrRayLibrary.newTab("ESP", "ImageIdESPHere")
+local combatTab = DrRayLibrary.newTab("Combat", "ImageIdESPHere")
+local miscTab = DrRayLibrary.newTab("Misc", "ImageIdHere")
+
+-- ESP Tab
+espTab.newToggle("Enable", "Enables ESP", settings.esp.Enabled, function(toggleState) settings.esp.Enabled = toggleState end)
+espTab.newSlider("Update Speed", "How fast the ESP updates in FPS.", settings.esp.UpdateSpeed, true, function(num) settings.esp.UpdateSpeed = math.clamp(num, 5, 120) end)
+espTab.newSlider("Max Distance", "Set the maximum distance", settings.esp.MaxDistance, false, function(num) settings.esp.MaxDistance = num end)
+espTab.newToggle("Tracer", "Enable Tracer", settings.esp.Tracer, function(toggleState) settings.esp.Tracer = toggleState end)
+espTab.newToggle("Box", "Enable Box", settings.esp.Box, function(toggleState) settings.esp.Box = toggleState end)
+espTab.newToggle("Distance", "Enable Distance", settings.esp.Distance, function(toggleState) settings.esp.Distance = toggleState end)
+espTab.newToggle("Name", "Enable Name", settings.esp.Name, function(toggleState) settings.esp.Name = toggleState end)
+espTab.newToggle("Weapon", "Enable Weapon", settings.esp.Weapon, function(toggleState) settings.esp.Weapon = toggleState end)
+espTab.newToggle("Team Check", "Enable Team Check", settings.esp.TeamCheck, function(toggleState) settings.esp.TeamCheck = toggleState end)
+espTab.newToggle("Sleep Check", "Enable Sleep Check", settings.esp.SleepCheck, function(toggleState) settings.esp.SleepCheck = toggleState end)
+espTab.newToggle("Bot Check", "Enable Bot Check", settings.esp.NoBot, function(toggleState) settings.esp.NoBot = toggleState end)
+espTab.newToggle("Armor", "Enable Armor", settings.esp.Armor, function(toggleState) settings.esp.Armor = toggleState end)
+
+-- Combat Tab (Silent Aim + Hitbox)
+combatTab.newLabel("--- Silent Aim ---")
+combatTab.newToggle("Silent Aim", "Enable Silent Aim", settings.silentAim.Enabled, function(s) settings.silentAim.Enabled = s end)
+combatTab.newDropdown("Aim Part", "Select aim part", {"Head", "Torso"}, function(s) settings.silentAim.HitPart = s end)
+combatTab.newToggle("Draw FOV", "Show FOV Circle", settings.silentAim.Fov.Visible, function(s) settings.silentAim.Fov.Visible = s end)
+combatTab.newSlider("FOV Radius", "Size of FOV", settings.silentAim.Fov.Radius, false, function(s) settings.silentAim.Fov.Radius = s end)
+combatTab.newToggle("Snapline", "Show Snapline", settings.silentAim.Snapline.Enabled, function(s) settings.silentAim.Snapline.Enabled = s end)
+combatTab.newToggle("Target Scientists", "Target NPCs", settings.silentAim.TargetScientists, function(s) settings.silentAim.TargetScientists = s end)
+
+combatTab.newLabel("--- Hitbox Expander ---")
+combatTab.newToggle("Hitbox", "Enable Hitbox", settings.combat.HitboxEnabled, function(toggleState) settings.combat.HitboxEnabled = toggleState end)
+combatTab.newDropdown("Hitbox Part", "Select the part for hitbox", {"Head", "Torso"}, function(selectedOption) settings.combat.HitPart = selectedOption end)
+combatTab.newSlider("Hitbox Size", "Adjust the size of the hitbox", settings.combat.HitboxSize, true, function(size) settings.combat.HitboxSize = size end)
+combatTab.newToggle("Team Check", "Enable Team Check", settings.combat.HitboxTeam, function(toggleState) settings.combat.HitboxTeam = toggleState end)
+combatTab.newToggle("Manipulation", "Enable Manipulation", settings.combat.ManipulationEnabled, function(toggleState) settings.combat.ManipulationEnabled = toggleState end)
+combatTab.newSlider("Manipulation Height", "Adjust the height for manipulation", settings.combat.ManipulationHeight, true, function(height) settings.combat.ManipulationHeight = height end)
+
+-- Misc Tab
+miscTab.newButton("Jump Shoot", "Cannot be turned off", function()
+    if not settings.misc.JumpShoot then
+        settings.misc.JumpShoot = true
+        for i, v in pairs(getgc(true)) do
+            if type(v) == "function" then
+                local info = debug.getinfo(v)
+                if info.name == "IsGrounded" then hookfunction(v, function(...) return true end) end
+            end
+        end
+    end
+end)
+
+miscTab.newButton("Walk Shoot", "Cannot be turned off", function()
+    if not settings.misc.WalkShoot then
+        settings.misc.WalkShoot = true
+        for i, v in pairs(getgc(true)) do
+            if type(v) == "function" then
+                local info = debug.getinfo(v)
+                if info.name == "SetSprintBlocked" then hookfunction(v, function(...) return false end) end
+            end
+        end
+    end
+end)
+
+miscTab.newButton("Water Shoot", "Cannot be turned off", function()
+    if not settings.misc.WaterShoot then
+        settings.misc.WaterShoot = true        
+        for i, v in pairs(getgc(true)) do
+            if type(v) == "function" then
+                local info = debug.getinfo(v)
+                if info.name == "IsSwimming" then hookfunction(v, function(...) return false end) end
+            end
+        end
+    end
+end)
+
+-- // ESP Loop & Logic //
+local CustomDrawing = loadstring(game:HttpGet("https://raw.githubusercontent.com/Pumpuma/UKI/main/Mycustomdrawing.lua"))()
+
+local maxUpdateRate = settings.esp.UpdateSpeed
+local minUpdateRate = 5
+local minUpdateInterval = 1 / maxUpdateRate
+local maxUpdateInterval = 1 / minUpdateRate
+local updateInterval = minUpdateInterval
+local lastUpdateTime = tick()
+local lastFrameTime = tick()
+local fpsDropThreshold = 60
+
+local function getRainbow()
+    local time = tick()
+    local r = math.sin(time * 0.5) * 0.5 + 0.5
+    local g = math.sin(time * 0.5 + 2) * 0.5 + 0.5
+    local b = math.sin(time * 0.5 + 4) * 0.5 + 0.5
+    return Color3.fromRGB(r * 255, g * 255, b * 255)
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = CoreGui
+screenGui.Name = "ESPHolder"
+
+local function updateDrawings()
+    screenGui:ClearAllChildren()
+
+    for _, model in pairs(workspace:GetChildren()) do
+        if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") then
+            local rootPart = model.HumanoidRootPart
+            local head = model:FindFirstChild("Head")
+            if not head then continue end
+
+            local screenPos, onScreen = Camera:WorldToScreenPoint(rootPart.Position)
+            local teamTag = head:FindFirstChild("Teamtag")
+            local teamEnabled = teamTag and teamTag.Enabled or false
+            local nameTag = head:FindFirstChild("Nametag") and head.Nametag:FindFirstChild("tag")
+            local playerName = (nameTag and nameTag.Text ~= "") and nameTag.Text or "Player"
+            local isBot = (playerName == "Shylou2644")
+            local weapon = PlayerWeapon(model)
+            local armor = getHighestPriorityArmor(model:FindFirstChild("Armor"))
+            local shouldApplyHitbox = not (settings.combat.HitboxTeam and teamEnabled)
             
-            if sPos.Z > 0 and settings.esp_Enabled then
-                if not (settings.esp_NoBot and dName == "Shylou2644") and not (settings.esp_SleepCheck and IsSleeping(model)) then
-                    local dist = (camera.CFrame.Position - hrp.Position).Magnitude
-                    if dist <= settings.esp_MaxDistance then
-                        local color = Color3.fromHSV((tick() * 0.1) % 1, 0.8, 1)
-                        local X, Y = sPos.X, sPos.Y
-                        local scale = 1 / (dist * math.tan(math.rad(camera.FieldOfView * 0.5))) * 25
-                        local w, h = math.floor(45 * scale), math.floor(72 * scale)
+            if onScreen and settings.esp.Enabled and (not settings.esp.TeamCheck or not teamEnabled) and (not settings.esp.SleepCheck or not IsSleeping(model)) and (not settings.esp.NoBot or not isBot) then
+                local distance = (Camera.CFrame.Position - rootPart.Position).Magnitude
+                local scaledDistance = math.ceil(distance / 3.2)
+                local scale = 1 / (distance * math.tan(math.rad(Camera.FieldOfView * 0.5))) * 25
+                local width, height = math.floor(45 * scale), math.floor(72 * scale)
 
-                        if settings.esp_Box then DrawingLib.new("Square").create(sGui, Vector2.new(X, Y), w, h, color, color, 1) end
-                        if settings.esp_Tracer then DrawingLib.new("Line").create(sGui, Vector2.new(Center.X, camera.ViewportSize.Y), Vector2.new(X, Y + h/2), color, 1) end
-                        if settings.esp_Name then DrawingLib.new("Text").create(sGui, Vector2.new(X, Y - h/2 - 12), dName, color) end
-                        if settings.esp_Weapon then DrawingLib.new("Text").create(sGui, Vector2.new(X, Y + h/2 + 15), GetPlayerWeapon(model), color) end
-                        if settings.esp_Distance then DrawingLib.new("Text").create(sGui, Vector2.new(X, Y + h/2 + 28), math.floor(dist / 3.5) .. "m", color) end
-                        if settings.esp_Armor then 
-                            local arm = DrawingLib.new("Text").create(sGui, Vector2.new(X, Y + h/2 + 45), GetArmor(model), color)
-                            arm.Size = 24 
-                        end
-                        if settings.esp_Skeleton then
-                            for c, p in pairs(skeleton_order) do
-                                local b1, b2 = model:FindFirstChild(c), model:FindFirstChild(p)
-                                if b1 and b2 then
-                                    local sp1, v1 = camera:WorldToViewportPoint(b1.Position)
-                                    local sp2, v2 = camera:WorldToViewportPoint(b2.Position)
-                                    if sp1.Z > 0 and sp2.Z > 0 then DrawingLib.new("Line").create(sGui, Vector2.new(sp1.X, sp1.Y), Vector2.new(sp2.X, sp2.Y), color, 1) end
-                                end
-                            end
+                width = math.max(width, 1)
+                height = math.max(height, 1)
+
+                local startPos = Vector2.new(Camera.ViewportSize.X / 2, 0)
+                local endPos = Vector2.new(screenPos.X, screenPos.Y - height / 2)
+
+                if settings.esp.Tracer then CustomDrawing.new("Line").create(screenGui, startPos, endPos, getRainbow(), 1) end
+                if settings.esp.Box then CustomDrawing.new("Square").create(screenGui, Vector2.new(screenPos.X, screenPos.Y), width, height, getRainbow(), getRainbow(), 1) end
+                if settings.esp.Name then CustomDrawing.new("Text").create(screenGui, Vector2.new(screenPos.X, screenPos.Y - height / 2 - 10), playerName, getRainbow()) end
+                if settings.esp.Weapon then CustomDrawing.new("Text").create(screenGui, Vector2.new(screenPos.X, screenPos.Y + height / 2 + 15), weapon, getRainbow()) end
+                if settings.esp.Armor then CustomDrawing.new("Text").create(screenGui, Vector2.new(screenPos.X, screenPos.Y + height / 2 + 30), armor, getRainbow()) end
+                if settings.esp.Distance then CustomDrawing.new("Text").create(screenGui, Vector2.new(screenPos.X, screenPos.Y + height / 2 + 45), tostring(scaledDistance) .. "m", getRainbow()) end 
+
+                if settings.combat.HitboxEnabled and shouldApplyHitbox then
+                    for _, part in ipairs({"Head", "Torso"}) do
+                        if model:FindFirstChild(part) and part ~= settings.combat.HitPart then
+                            resetPartSize(model:FindFirstChild(part))
                         end
                     end
-                end
-            end
-            if settings.combat_HitboxEnabled then
-                local p = model:FindFirstChild(settings.combat_HitPart)
-                if p then p.Size = Vector3.new(settings.combat_HitboxSize, settings.combat_HitboxSize, settings.combat_HitboxSize); p.Transparency = 0.6; p.CanCollide = false end
-            end
-
-        -- ORE LOGIC
-        elseif settings.ore_Enabled then
-            local mp = model:FindFirstChildOfClass("MeshPart")
-            if mp and mp.MeshId == ore_id.Stone then
-                local oName = "Stone"; local oPart = mp
-                for _, p in pairs(model:GetChildren()) do
-                    if p:IsA("BasePart") then
-                        if p.Color == ore_id.NitrateColor then oName = "Nitrate" oPart = p break
-                        elseif p.Color == ore_id.IronColor then oName = "Iron" oPart = p break end
-                    end
-                end
-                
-                local allowed = (oName == "Stone" and settings.ore_ShowStone) or (oName == "Iron" and settings.ore_ShowIron) or (oName == "Nitrate" and settings.ore_ShowNitrate)
-                if allowed then
-                    local d = (camera.CFrame.Position - oPart.Position).Magnitude
-                    local sP, on = camera:WorldToViewportPoint(oPart.Position)
-                    if sP.Z > 0 and d <= settings.ore_MaxDistance then
-                        local oCol = (oName == "Iron" and Color3.fromRGB(255,165,0)) or (oName == "Nitrate" and Color3.new(1,1,1)) or Color3.new(0.6,0.6,0.6)
-                        DrawingLib.new("Text").create(sGui, Vector2.new(sP.X, sP.Y), oName .. " [" .. math.floor(d/3.5) .. "m]", oCol)
-                        if settings.ore_Chams then
-                            local h = model:FindFirstChild("OreHighlight") or Instance.new("Highlight", model)
-                            h.FillColor = oCol; h.Enabled = true; h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                        end
+                    local hitPartInstance = model:FindFirstChild(settings.combat.HitPart)
+                    if hitPartInstance then
+                        if not originalSizes[hitPartInstance] then originalSizes[hitPartInstance] = hitPartInstance.Size end
+                        hitPartInstance.Transparency = 0.50
+                        hitPartInstance.CanCollide = false
+                        hitPartInstance.Size = Vector3.new(settings.combat.HitboxSize, settings.combat.HitboxSize, settings.combat.HitboxSize)
                     end
                 end
             end
         end
+    end
+end
+
+-- // Main Loop //
+RunService.RenderStepped:Connect(function()
+    -- 1. Silent Aim Visuals
+    local center = Camera.ViewportSize / 2
+    local baseRadius = settings.silentAim.Fov.Radius
+    local fovScale = baseRadius * (math.tan(math.rad(50)) / math.tan(math.rad(Camera.FieldOfView))) ^ 0.35
+
+    if settings.silentAim.Fov.Visible and settings.silentAim.Enabled then
+        fovCircle.Visible = true
+        fovCircle.Position = center
+        fovCircle.Radius = fovScale
+        fovCircle.Color = settings.silentAim.Fov.Color
+    else
+        fovCircle.Visible = false
+    end
+
+    local saTarget, _ = getClosestPlayer()
+    if saTarget then
+        local screenPos, onScreen = Camera:WorldToViewportPoint(saTarget.Position)
+        local screenVec = Vector2.new(screenPos.X, screenPos.Y)
+        if settings.silentAim.Snapline.Enabled and onScreen then
+            saSnapLine.Visible = true
+            saSnapLine.From = center
+            saSnapLine.To = screenVec
+            saSnapLine.Color = settings.silentAim.Snapline.Color
+        else
+            saSnapLine.Visible = false
+        end
+
+        if settings.silentAim.Highlight.Enabled then
+            HL.Adornee = saTarget.Parent
+            HL.OutlineColor = settings.silentAim.Highlight.Color
+            HL.FillTransparency = settings.silentAim.Highlight.FillTransparency
+        else
+            HL.Adornee = nil
+        end
+    else
+        saSnapLine.Visible = false
+        HL.Adornee = nil
+    end
+
+    -- 2. ESP Loop (Frame Time Managed)
+    local currentTime = tick()
+    local frameTime = currentTime - lastFrameTime
+    lastFrameTime = currentTime
+
+    local desiredInterval = 1 / settings.esp.UpdateSpeed
+    local fps = 1 / frameTime
+
+    if fps < fpsDropThreshold then
+        local fpsDropFactor = math.clamp((fpsDropThreshold - fps) / (fpsDropThreshold - minUpdateRate), 0, 1)
+        updateInterval = math.max(minUpdateInterval, desiredInterval + fpsDropFactor * (maxUpdateInterval - desiredInterval))
+    else
+        updateInterval = minUpdateInterval
+    end
+
+    if currentTime - lastUpdateTime >= updateInterval then
+        lastUpdateTime = currentTime
+        updateDrawings()
     end
 end)
