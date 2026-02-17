@@ -1,5 +1,5 @@
 local DrRayLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/AZYsGithub/DrRay-UI-Library/main/DrRay.lua"))()
-local window = DrRayLibrary:Load("Faith.pub", "Default");
+local window = DrRayLibrary:Load("chino.pubv2", "Default");
 
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
@@ -19,7 +19,7 @@ local settings = {
         TargetScientists = true,
         Fov = {
             Visible = true,
-            Radius = 67,
+            Radius = 100,
             Color = Color3.fromRGB(255, 255, 255),
             Filled = false
         },
