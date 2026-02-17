@@ -12,43 +12,43 @@ local validGuns = { "AR15", "C9", "Crossbow", "Bow", "EnergyRifle", "GaussRifle"
 
 local settings = {
     silentAim = {
-        Enabled = false,
+        Enabled = true,
         HitPart = "Head",
         MaxDistance = 2500,
         TargetSleeping = false,
         TargetScientists = true,
         Fov = {
-            Visible = false,
+            Visible = true,
             Radius = 67,
             Color = Color3.fromRGB(255, 255, 255),
             Filled = false
         },
         Snapline = {
-            Enabled = false,
+            Enabled = true,
             Color = Color3.fromRGB(255, 255, 255)
         },
         Highlight = {
-            Enabled = false,
+            Enabled = true,
             Color = Color3.fromRGB(255, 255, 255),
             FillTransparency = 1
         }
     },
     esp = {
-        Enabled = false,
-        Tracer = false,
-        Box = false,
-        Distance = false,
-        Name = false,
-        Weapon = false,
-        Armor = false,
+        Enabled = true,
+        Tracer = ture,
+        Box = true,
+        Distance = true,
+        Name = true,
+        Weapon = true,
+        Armor = true,
         MaxDistance = 5000,
-        TeamCheck = false,
-        SleepCheck = false,
+        TeamCheck = true,
+        SleepCheck = true,
         NoBot = false,
         UpdateSpeed = 120
     },
     combat = {
-        HitboxEnabled = false,
+        HitboxEnabled = true,
         HitPart = "Head",
         HitboxSize = 8.4,
         HitboxTeam = false,
